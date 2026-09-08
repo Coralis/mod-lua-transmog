@@ -209,7 +209,35 @@ local MIRROR_IMAGE_DEBUG = false
 -- significantly reducing login bandwidth and database load.
 local CACHE_VERSION = 1
 
-	
+-- ──────────────────────────────── PLAYERBOT ────────────────────────────────────
+
+-- PLAYERBOT SETTINGS
+-- Controls whether or not the transmog system should collect and apply transmog
+-- appearances to various playerbot managed players
+--
+-- RNDBOT_TRANSMOG = Players registered as RandomBots
+-- ADDBOT_TRANSMOG = Players registered as AddclassBots
+-- ALTBOT_TRANSMOG = Players registered as AltBots
+local ENABLE_RNDBOT_TRANSMOG = false
+local ENABLE_ADDBOT_TRANSMOG = false
+local ENABLE_ALTBOT_TRANSMOG = true
+
+local function AllowTransmog(player)
+    if not player then return false end
+
+    if player:IsRandomBot() then
+        return ENABLE_RNDBOT_TRANSMOG
+    elseif player:IsAltBot() then
+        return ENABLE_ALTBOT_TRANSMOG
+    elseif player:IsAddclassBot() then
+        return ENABLE_ADDBOT_TRANSMOG
+    elseif player:IsRealPlayer() then
+        return true
+    else
+        return false
+    end
+end
+
 -- ╔══════════════════════════════════════════════════════════════════════════════╗
 -- ║                                    SCRIPT                                    ║
 -- ╚══════════════════════════════════════════════════════════════════════════════╝
@@ -996,7 +1024,7 @@ if ENABLE_AIO_BRIDGE then
     
     -- Apply all enchant transmogs for a player (uses session cache)
     local function ApplyAllEnchantTransmogsFromCache(player)
-        if not player then return end
+        if not AllowTransmog(player) then return end
         
         local guid = player:GetGUIDLow()
         local enchantTransmogs = GetCachedActiveEnchantTransmogs(guid)
@@ -1022,7 +1050,7 @@ if ENABLE_AIO_BRIDGE then
     -- NOTE: Slots with NULL item_id (enchant-only) are not in transmogs table,
     --       so they keep their original item appearance. Only 0 (hide) and >0 (transmog) are applied.
     local function ApplyAllTransmogsFromCache(player)
-        if not player then return end
+        if not AllowTransmog(player) then return end
         
         local guid = player:GetGUIDLow()
         local transmogs = GetCachedActiveTransmogs(guid)
@@ -1097,7 +1125,7 @@ if ENABLE_AIO_BRIDGE then
     end
     
     local function AddToCollection(player, itemId, notifyPlayer)
-        if not player or not itemId then return false end
+        if not AllowTransmog(player) or not itemId then return false end
         
         -- Check blacklist first
         if IsItemBlacklisted(itemId) then
@@ -1150,6 +1178,7 @@ if ENABLE_AIO_BRIDGE then
     local function SafeSendToPlayer(playerName, msgBuilder)
         -- Get fresh player reference by name
         local player = GetPlayerByName(playerName)
+
         if player then
             msgBuilder:Send(player)
         end
@@ -2222,6 +2251,7 @@ if ENABLE_AIO_BRIDGE then
     -- It scans all possible item slots on login
     -- This is required to catch items received via mail, trade, or repurchased from vendors
     local function ScanAllItems(player)
+        if not AllowTransmog(player) then return end
         -- Scan equipment and backpack (slots 0-38)
         for slot = 0, 38 do
             local item = player:GetItemByPos(255, slot)
@@ -2285,7 +2315,7 @@ if ENABLE_AIO_BRIDGE then
     -- ScanAllQuests is a helper function used to resynchronize item collections from quests completed before the script was installed
     -- Uses async queries to avoid blocking the server
     local function ScanAllQuests(player)
-        if not player then
+        if not player or not AllowTransmog(player) then
             return
         end
         
