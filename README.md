@@ -157,6 +157,21 @@ Import transmog_characters_base.sql to Acore_characters
 
 Ensure it is applied to the **characters database**.
 
+### GM Commands
+
+GMs at rank 3 or higher, and the server console, can apply or remove transmogs from an online player:
+
+```
+.transmog apply PlayerName 0 12345
+.transmog apply PlayerName head 0
+.transmog remove PlayerName 0
+.transmog remove PlayerName all
+.transmog remove 0
+.transmog remove all
+```
+
+The player-only remove forms (`.transmog remove slot` and `.transmog remove all`) target the GM who ran the command. Use `all` instead of a slot to remove every transmog from the target. Slot IDs and names such as `head`, `chest`, `mainhand`, and `offhand` are supported. Apply requests use the existing collection and hide-slot rules, persist to the active transmog table, and refresh the online player's appearance. Offline targets are not supported yet. The command also accepts raw console syntax without the prefix.
+
 ---
 
 ## Localization

@@ -2541,6 +2541,135 @@ if ENABLE_AIO_BRIDGE then
     -- PLAYER_EVENT_ON_COMMAND
     -- ============================================================================
     
+    local function SendGMCommandMessage(player, message)
+        if player then
+            player:SendBroadcastMessage("|cff00ff00[Transmog]|r " .. message)
+        else
+            print("[Transmog] " .. message)
+        end
+    end
+
+    local GM_COMMAND_SLOT_NAMES = {
+        head = 0,
+        shoulder = 2,
+        shirt = 3,
+        chest = 4,
+        waist = 5,
+        legs = 6,
+        feet = 7,
+        wrist = 8,
+        hands = 9,
+        back = 14,
+        cloak = 14,
+        mainhand = 15,
+        offhand = 16,
+        secondaryhand = 16,
+        ranged = 17,
+        tabard = 18,
+    }
+
+    local function ParseGMCommandSlot(value)
+        local numericSlot = tonumber(value)
+        if numericSlot and TRANSMOG_SLOTS[numericSlot] then
+            return numericSlot
+        end
+
+        return GM_COMMAND_SLOT_NAMES[value and value:lower()]
+    end
+
+    local function OnTransmogCommand(event, player, command)
+        if not command then return end
+
+        command = command:gsub("^%s*%.?%s*", "")
+        local arguments = command:match("^[Tt][Rr][Aa][Nn][Ss][Mm][Oo][Gg]%s+(.+)$")
+        if not arguments then return end
+
+        if player and player:GetGMRank() < GM_SCAN_QUESTS_MIN_LEVEL then
+            SendGMCommandMessage(player, "Insufficient permissions. GM level " .. GM_SCAN_QUESTS_MIN_LEVEL .. " required.")
+            return false
+        end
+
+        local values = {}
+        for value in arguments:gmatch("%S+") do
+            table.insert(values, value)
+        end
+
+        local action = values[1] and values[1]:lower()
+        if action == "apply" and #values == 4 then
+            local target = GetPlayerByName(values[2])
+            local slotId = ParseGMCommandSlot(values[3])
+            local itemId = tonumber(values[4])
+
+            if not target then
+                SendGMCommandMessage(player, "Player not found or offline: " .. values[2])
+                return false
+            end
+            if not slotId then
+                SendGMCommandMessage(player, "Invalid transmog slot: " .. values[3])
+                return false
+            end
+            if not itemId or itemId < 0 or itemId % 1 ~= 0 then
+                SendGMCommandMessage(player, "Invalid item ID: " .. values[4])
+                return false
+            end
+
+            TRANSMOG_HANDLER.ApplyTransmog(target, slotId, itemId)
+            SendGMCommandMessage(player, string.format(
+                "Apply requested for player=%s, slot=%d, item=%d. The target will receive the result.",
+                target:GetName(), slotId, itemId
+            ))
+            return false
+        elseif action == "remove" and (#values == 2 or #values == 3) then
+            local playerName = values[2]
+            local slot = values[3]
+            if not slot then
+                if not player then
+                    SendGMCommandMessage(nil, "Usage: .transmog remove PlayerName slot")
+                    return false
+                end
+                playerName = player:GetName()
+                slot = values[2]
+            end
+
+            local target = GetPlayerByName(playerName)
+            if slot:lower() == "all" then
+                if not target then
+                    SendGMCommandMessage(player, "Player not found or offline: " .. playerName)
+                    return false
+                end
+
+                for slotId in pairs(TRANSMOG_SLOTS) do
+                    TRANSMOG_HANDLER.RemoveTransmog(target, slotId)
+                end
+
+                SendGMCommandMessage(player, "All transmogs removed for player=" .. target:GetName() .. ".")
+                return false
+            end
+
+            local slotId = ParseGMCommandSlot(slot)
+            if not target then
+                SendGMCommandMessage(player, "Player not found or offline: " .. playerName)
+                return false
+            end
+            if not slotId then
+                SendGMCommandMessage(player, "Invalid transmog slot: " .. slot)
+                return false
+            end
+
+            TRANSMOG_HANDLER.RemoveTransmog(target, slotId)
+            SendGMCommandMessage(player, string.format(
+                "Remove requested for player=%s, slot=%d.",
+                target:GetName(), slotId
+            ))
+            return false
+        end
+
+        SendGMCommandMessage(player, "Usage: .transmog apply PlayerName slot item | .transmog remove PlayerName slot|all")
+        return false
+    end
+
+    RegisterPlayerEvent(PLAYER_EVENT_ON_COMMAND, OnTransmogCommand)
+
     -- GM Command: Scan all characters' quests and add rewards to collections
     -- Usage: /transmog quests (client side)
     -- Requires GM level defined by GM_SCAN_QUESTS_MIN_LEVEL
