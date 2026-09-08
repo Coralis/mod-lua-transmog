@@ -1438,7 +1438,7 @@ if ENABLE_AIO_BRIDGE then
     -- NOTE: RequestSlotItems handler removed - client uses local cache filtering
     
     -- Apply transmog (async version)
-    TRANSMOG_HANDLER.ApplyTransmog = function(player, slotId, itemId)
+    TRANSMOG_HANDLER.ApplyTransmog = function(player, slotId, itemId, bypassCollection)
         if not slotId then
             AIO.Msg():Add("TRANSMOG", "Error", "INVALID_SLOT_OR_ITEM"):Send(player)
             return
@@ -1491,7 +1491,7 @@ if ENABLE_AIO_BRIDGE then
             playerName, slotId, itemId, tostring(ALLOW_UNCOLLECTED_TRANSMOG), tostring(ALLOW_DISPLAY_ID_TRANSMOG)))
         
         -- If ALLOW_UNCOLLECTED_TRANSMOG is true, skip collection check
-        if ALLOW_UNCOLLECTED_TRANSMOG then
+        if ALLOW_UNCOLLECTED_TRANSMOG or bypassCollection then
             -- Save to database (always - even if no item equipped)
             SaveActiveTransmog(guid, slotId, itemId)
             
@@ -2594,14 +2594,16 @@ if ENABLE_AIO_BRIDGE then
             table.insert(values, value)
         end
 
-        local action = values[1] and values[1]:lower()
+        local playerName = values[1]
+        local action = values[2] and values[2]:lower()
         if action == "apply" and #values == 4 then
-            local target = GetPlayerByName(values[2])
+            local target = GetPlayerByName(playerName)
             local slotId = ParseGMCommandSlot(values[3])
-            local itemId = tonumber(values[4])
+            local itemValue = values[4]:lower()
+            local itemId = itemValue == "hide" and 0 or tonumber(itemValue)
 
             if not target then
-                SendGMCommandMessage(player, "Player not found or offline: " .. values[2])
+                SendGMCommandMessage(player, "Player not found or offline: " .. playerName)
                 return false
             end
             if not slotId then
@@ -2609,28 +2611,18 @@ if ENABLE_AIO_BRIDGE then
                 return false
             end
             if not itemId or itemId < 0 or itemId % 1 ~= 0 then
-                SendGMCommandMessage(player, "Invalid item ID: " .. values[4])
+                SendGMCommandMessage(player, "Invalid item ID or hide keyword: " .. values[4])
                 return false
             end
 
-            TRANSMOG_HANDLER.ApplyTransmog(target, slotId, itemId)
+            TRANSMOG_HANDLER.ApplyTransmog(target, slotId, itemId, true)
             SendGMCommandMessage(player, string.format(
-                "Apply requested for player=%s, slot=%d, item=%d. The target will receive the result.",
-                target:GetName(), slotId, itemId
+                "Apply requested for player=%s, slot=%d, item=%s. The target will receive the result.",
+                target:GetName(), slotId, itemId == 0 and "hide" or tostring(itemId)
             ))
             return false
-        elseif action == "remove" and (#values == 2 or #values == 3) then
-            local playerName = values[2]
+        elseif action == "remove" and #values == 3 then
             local slot = values[3]
-            if not slot then
-                if not player then
-                    SendGMCommandMessage(nil, "Usage: .transmog remove PlayerName slot")
-                    return false
-                end
-                playerName = player:GetName()
-                slot = values[2]
-            end
-
             local target = GetPlayerByName(playerName)
             if slot:lower() == "all" then
                 if not target then
@@ -2664,7 +2656,7 @@ if ENABLE_AIO_BRIDGE then
             return false
         end
 
-        SendGMCommandMessage(player, "Usage: .transmog apply PlayerName slot item | .transmog remove PlayerName slot|all")
+        SendGMCommandMessage(player, "Usage: .transmog PlayerName apply slot item|hide | .transmog PlayerName remove slot|all")
         return false
     end
 
